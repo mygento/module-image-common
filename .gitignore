@@ -1,0 +1,11 @@
+/nbproject
+/node_modules
+/generate
+/generated
+/.idea
+/vendor
+/composer.lock
+.DS_Store
+.php-cs-fixer.cache
+auth.json
+/jeeves.phar
