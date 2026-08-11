@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="system">
+            <group id="upload_configuration">
+                <label>Format Settings</label>
+                <field id="webp_quality" translate="label" type="text" sortOrder="110" showInDefault="1" canRestore="1">
+                    <label>Webp Quality</label>
+                    <validate>validate-digits validate-digits-range digits-range-1-100 required-entry</validate>
+                    <comment>Webp Quality for resized images 1-100%.</comment>
+                </field>
+                <field id="avif_quality" translate="label" type="text" sortOrder="120" showInDefault="1" canRestore="1">
+                    <label>Avif Quality</label>
+                    <validate>validate-digits validate-digits-range digits-range-1-100 required-entry</validate>
+                    <comment>Avif Quality for resized images 1-100%.</comment>
+                </field>
+                <field id="png_interlaced" translate="label" type="select" sortOrder="130" showInDefault="1" canRestore="1">
+                    <label>Enable Interlaced PNG</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="jpg_progressive" translate="label" type="select" sortOrder="140" showInDefault="1" canRestore="1">
+                    <label>Enable Progressive Jpeg</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <system>
+            <upload_configuration>
+                <webp_quality>80</webp_quality>
+                <avif_quality>60</avif_quality>
+                <png_interlaced>0</png_interlaced>
+                <jpg_progressive>0</jpg_progressive>
+            </upload_configuration>
+        </system>
+    </default>
+</config>
