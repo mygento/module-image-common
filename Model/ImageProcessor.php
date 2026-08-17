@@ -13,8 +13,8 @@ use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Interfaces\ImageInterface;
 use Magento\Framework\App\Filesystem\DirectoryList;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Filesystem;
-use Magento\Framework\GraphQl\Exception\GraphQlInputException;
 use Magento\Framework\UrlInterface;
 use Magento\Store\Model\StoreManagerInterface;
 
@@ -39,20 +39,32 @@ class ImageProcessor
      * @return array{
      *     srcset: string,
      *     url: string,
-     *     lqip: string
+     *     lqip?: string,
+     *     list: array<array{
+     *         width: int,
+     *         url: string
+     *     }>
      * }
      */
-    public function process(string $path, string $sourceDir, string $outputDir, int $width, ?int $height = null, ?string $ext = null): array
+    public function process(string $path, string $sourceDir, string $outputDir, int $width, ?int $height = null, ?string $ext = null, bool $lqip = false): array
     {
         $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
-        $srcPath = rtrim($sourceDir, '/') . $path;
+        $sourceDir = rtrim($sourceDir, '/') . '/';
+        $srcPath = $sourceDir . $path;
 
         if (!$write->isExist($srcPath)) {
-            throw new GraphQlInputException(__('Source image not found: %1', $path));
+            throw new LocalizedException(__('Source image not found: %1', $path));
         }
 
-        $basic = $this->build($path, $sourceDir, $outputDir, $width, $height, ext: $ext) ?? $sourceDir . $path;
-        $images = [$width => $basic];
+        $basic = $this->build($path, $sourceDir, $outputDir, $width, $height, ext: $ext) ?? $srcPath;
+        $basicUrl = $this->fileToUrl($write->getAbsolutePath($basic));
+        $list = [
+            [
+                'url' => $basicUrl,
+                'width' => $width,
+            ],
+        ];
+        $set = [$basicUrl . ' ' . $width . 'w'];
 
         for ($i = 2;$i <= 3;$i++) {
             $im = $this->build(
@@ -67,27 +79,34 @@ class ImageProcessor
             if ($im === null) {
                 continue;
             }
-            $images[$width * $i] = $im;
+            $w = $width * $i;
+            $url = $this->fileToUrl($write->getAbsolutePath($im));
+            $list[] = [
+                'url' => $url,
+                'width' => $w,
+            ];
+            $set[] = $url . ' ' . $w . 'w';
         }
 
-        $set = [];
-        foreach ($images as $w => $p) {
-            $set[] = $this->fileToUrl($write->getAbsolutePath($p)) . ' ' . $w . 'w';
-        }
-
-        return [
+        $result = [
             'srcset' => implode(', ', $set),
             'url' => $this->fileToUrl($write->getAbsolutePath($basic)),
-            'lqip' => $this->lqip(
+            'list' => $list,
+        ];
+
+        if ($lqip) {
+            $result['lqip'] = $this->lqip(
                 $path,
                 $sourceDir,
                 $outputDir,
                 $ext,
-            ),
-        ];
+            );
+        }
+
+        return $result;
     }
 
-    public function build(string $srcImg, string $sourceDir, string $outputDir, int $width, ?int $height = null, int $scale = 1, ?string $ext = null): ?string
+    private function build(string $srcImg, string $sourceDir, string $outputDir, int $width, ?int $height = null, int $scale = 1, ?string $ext = null): ?string
     {
         $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
         $imageInfo = $this->file->getPathInfo($srcImg);
@@ -111,7 +130,7 @@ class ImageProcessor
         return $destImg;
     }
 
-    public function resize(string $srcImg, string $destImg, int $width, ?int $height = null): ?string
+    private function resize(string $srcImg, string $destImg, int $width, ?int $height = null): ?string
     {
         $ext = $this->file->getPathInfo($destImg)['extension'];
         if ($ext === null) {
@@ -137,7 +156,7 @@ class ImageProcessor
         return $destImg;
     }
 
-    public function lqip(string $srcImg, string $sourceDir, string $outputDir, ?string $ext = null): ?string
+    private function lqip(string $srcImg, string $sourceDir, string $outputDir, ?string $ext = null): ?string
     {
         $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
         $imageInfo = $this->file->getPathInfo($srcImg);

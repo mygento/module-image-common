@@ -27,6 +27,7 @@ class Uploader
      */
     public function __construct(
         private Filesystem $filesystem,
+        private Filesystem\Io\File $file,
         private StoreManagerInterface $storeManager,
         private File\UploaderFactory $uploaderFactory,
         private LoggerInterface $logger,
@@ -82,7 +83,7 @@ class Uploader
 
     public function moveFileFromTmp(string $inputFile): string
     {
-        $finalPath = $this->getFilePath($this->basePath, $inputFile);
+        $finalPath = $this->getNewFilePath($this->basePath, $inputFile);
 
         try {
             $this->mediaDirectory->renameFile(
@@ -98,8 +99,47 @@ class Uploader
         return $finalPath;
     }
 
+    public function getBasePath(): string
+    {
+        return rtrim($this->basePath, '/');
+    }
+
     private function getFilePath(string $path, string $imageName): string
     {
         return rtrim($path, '/') . '/' . ltrim($imageName, '/');
+    }
+
+    private function getNewFilePath(string $path, string $imageName): string
+    {
+        $finalPath = $this->getFilePath($path, $imageName);
+
+        if (!$this->mediaDirectory->isExist($finalPath)) {
+            return $finalPath;
+        }
+
+        $imageInfo = $this->file->getPathInfo($imageName);
+
+        $directory = $imageInfo['dirname'] ?? '';
+        $filename = $imageInfo['filename'];
+        $extension = $imageInfo['extension'] ?? '';
+
+        $counter = 1;
+
+        do {
+            $newImageName = $filename . '_' . $counter;
+
+            if ($extension !== '') {
+                $newImageName .= '.' . $extension;
+            }
+
+            if ($directory !== '' && $directory !== '.') {
+                $newImageName = $directory . '/' . $newImageName;
+            }
+
+            $finalPath = $this->getFilePath($path, $newImageName);
+            $counter++;
+        } while ($this->mediaDirectory->isExist($finalPath));
+
+        return $finalPath;
     }
 }
