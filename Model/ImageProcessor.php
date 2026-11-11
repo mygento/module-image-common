@@ -129,14 +129,15 @@ class ImageProcessor
     private function executeResize(string $head, string $tail, string $srcImg, string $sourceDir, string $outputDir, int $width, ?int $height = null, ?string $ext = null, bool $lqip = false): array
     {
         $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
-        $basic = $this->build(
+        $resized = $this->build(
             head: $head,
             tail: $tail,
             srcImg: $srcImg,
             sourceDir: $sourceDir,
             width: $width,
             height: $height,
-        ) ?? $sourceDir . $srcImg;
+        );
+        $basic = $resized ?? $sourceDir . $srcImg;
 
         $basicUrl = $this->fileToUrl($write->getAbsolutePath($basic));
         $list = [
@@ -148,6 +149,9 @@ class ImageProcessor
         $set = [$basicUrl . ' ' . $width . 'w'];
 
         for ($i = 2;$i <= 3;$i++) {
+            if (!$resized) {
+                break;
+            }
             $im = $this->build(
                 head: $head,
                 tail: $tail,
