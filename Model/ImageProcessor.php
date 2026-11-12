@@ -262,7 +262,7 @@ class ImageProcessor
                 return null;
             }
             $dstImage = $srcImage->scaleDown($width, $height);
-            $this->saveImage($dstImage, $destImg, strtolower($ext));
+            $this->saveImage($dstImage, $destImg, $ext);
         } catch (\Throwable) {
             return null;
         }
