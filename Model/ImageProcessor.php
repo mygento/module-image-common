@@ -39,7 +39,7 @@ class ImageProcessor
      * @return array{
      *     srcset: string,
      *     url: string,
-     *     lqip?: string,
+     *     lqip?: string|null,
      *     list: array<array{
      *         width: int,
      *         url: string
@@ -48,6 +48,7 @@ class ImageProcessor
      */
     public function process(string $path, string $sourceDir, string $outputDir, int $width, ?int $height = null, ?string $ext = null, bool $lqip = false): array
     {
+        $ext = $ext ? strtolower($ext) : $ext;
         $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
         $sourceDir = rtrim($sourceDir, '/') . '/';
         $srcPath = $sourceDir . $path;
@@ -55,9 +56,31 @@ class ImageProcessor
         if (!$write->isExist($srcPath)) {
             throw new LocalizedException(__('Source image not found: %1', $path));
         }
+        $imageInfo = $this->file->getPathInfo($path);
 
-        $basic = $this->build($path, $sourceDir, $outputDir, $width, $height, ext: $ext) ?? $srcPath;
-        $basicUrl = $this->fileToUrl($write->getAbsolutePath($basic));
+        $destFolder =  $outputDir . '/' . $width . 'x' . ($height ?? '') . '/' . ltrim($imageInfo['dirname'], '/');
+        $head = $destFolder . '/' . $imageInfo['filename'];
+        $tail = '.' . strtolower($ext ?? $imageInfo['extension']);
+
+        $basicImg = $this->buildFilename($head, $tail, $width, $height);
+        if (!$write->isExist($basicImg)) {
+            // all not yet resized
+            $write->create($destFolder);
+
+            return $this->executeResize(
+                head: $head,
+                tail: $tail,
+                srcImg: $path,
+                sourceDir: $sourceDir,
+                outputDir: $outputDir,
+                width: $width,
+                height: $height,
+                ext: $ext,
+                lqip: $lqip,
+            );
+        }
+
+        $basicUrl = $this->fileToUrl($write->getAbsolutePath($basicImg));
         $list = [
             [
                 'url' => $basicUrl,
@@ -67,16 +90,8 @@ class ImageProcessor
         $set = [$basicUrl . ' ' . $width . 'w'];
 
         for ($i = 2;$i <= 3;$i++) {
-            $im = $this->build(
-                $path,
-                $sourceDir,
-                $outputDir,
-                width: $width,
-                height: $height,
-                scale: $i,
-                ext: $ext,
-            );
-            if ($im === null) {
+            $im = $this->buildFilename($head, $tail, $width, $height, scale: $i);
+            if (!$write->isExist($im)) {
                 continue;
             }
             $w = $width * $i;
@@ -88,9 +103,123 @@ class ImageProcessor
             $set[] = $url . ' ' . $w . 'w';
         }
 
+        return $this->makeResult(
+            srcset: implode(', ', $set),
+            list: $list,
+            basicImage: $basicUrl,
+            path: $path,
+            sourceDir: $sourceDir,
+            outputDir: $outputDir,
+            ext: $ext,
+            lqip: $lqip,
+        );
+    }
+
+    /**
+     * @return array{
+     *     srcset: string,
+     *     url: string,
+     *     lqip?: string|null,
+     *     list: array<array{
+     *         width: int,
+     *         url: string
+     *     }>
+     * }
+     */
+    private function executeResize(string $head, string $tail, string $srcImg, string $sourceDir, string $outputDir, int $width, ?int $height = null, ?string $ext = null, bool $lqip = false): array
+    {
+        $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
+        $resized = $this->build(
+            head: $head,
+            tail: $tail,
+            srcImg: $srcImg,
+            sourceDir: $sourceDir,
+            width: $width,
+            height: $height,
+        );
+        $basic = $resized ?? $sourceDir . $srcImg;
+
+        $basicUrl = $this->fileToUrl($write->getAbsolutePath($basic));
+        $list = [
+            [
+                'url' => $basicUrl,
+                'width' => $width,
+            ],
+        ];
+        $set = [$basicUrl . ' ' . $width . 'w'];
+
+        for ($i = 2;$i <= 3;$i++) {
+            if (!$resized) {
+                break;
+            }
+            $im = $this->build(
+                head: $head,
+                tail: $tail,
+                srcImg: $srcImg,
+                sourceDir: $sourceDir,
+                width: $width,
+                height: $height,
+                scale: $i,
+            );
+            if ($im === null) {
+                break;
+            }
+            $w = $width * $i;
+            $url = $this->fileToUrl($write->getAbsolutePath($im));
+            $list[] = [
+                'url' => $url,
+                'width' => $w,
+            ];
+            $set[] = $url . ' ' . $w . 'w';
+        }
+
+        return $this->makeResult(
+            srcset: implode(', ', $set),
+            list: $list,
+            basicImage: $basicUrl,
+            path: $srcImg,
+            sourceDir: $sourceDir,
+            outputDir: $outputDir,
+            ext: $ext,
+            lqip: $lqip,
+        );
+    }
+
+    private function build(string $head, string $tail, string $srcImg, string $sourceDir, int $width, ?int $height = null, int $scale = 1): ?string
+    {
+        $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
+        $destImg = $this->buildFilename($head, $tail, $width, $height, $scale);
+        $w = $width * $scale;
+        $h = $height !== null ? $height * $scale : null;
+
+        $result = $this->resize($write->getAbsolutePath($sourceDir . $srcImg), $write->getAbsolutePath($destImg), $w, $h);
+        if ($result === null) {
+            return $result;
+        }
+
+        return $destImg;
+    }
+
+    /**
+     * @param array<array{
+     *     width: int,
+     *     url: string
+     * }> $list,
+     * @return array{
+     *     srcset: string,
+     *     url: string,
+     *     lqip?: string|null,
+     *     list: array<array{
+     *         width: int,
+     *         url: string
+     *     }>
+     * }
+     */
+    private function makeResult(string $srcset, array $list, string $basicImage, string $path, string $sourceDir, string $outputDir, ?string $ext = null, bool $lqip = false): array
+    {
         $result = [
-            'srcset' => implode(', ', $set),
-            'url' => $this->fileToUrl($write->getAbsolutePath($basic)),
+            'srcset' => $srcset,
+            'url' => $basicImage,
             'list' => $list,
         ];
 
@@ -106,28 +235,13 @@ class ImageProcessor
         return $result;
     }
 
-    private function build(string $srcImg, string $sourceDir, string $outputDir, int $width, ?int $height = null, int $scale = 1, ?string $ext = null): ?string
+    private function buildFilename(string $head, string $tail, int $width, ?int $height = null, int $scale = 1): string
     {
-        $write = $this->filesystem->getDirectoryWrite(DirectoryList::MEDIA);
-        $imageInfo = $this->file->getPathInfo($srcImg);
-
-        $destFolder =  $outputDir . '/' . $width . 'x' . ($height ?? '') . '/' . ltrim($imageInfo['dirname'], '/');
-        $write->create($destFolder);
         $w = $width * $scale;
         $h = $height !== null ? $height * $scale : null;
         $suffix = $scale > 1 ? '_' . $w . 'x' . ($h ?? '') : '';
-        $destImg = $destFolder . '/' . $imageInfo['filename'] . $suffix . '.' . ($ext ?? $imageInfo['extension']);
 
-        if ($write->isExist($destImg)) {
-            return $destImg;
-        }
-
-        $result = $this->resize($write->getAbsolutePath($sourceDir . $srcImg), $write->getAbsolutePath($destImg), $w, $h);
-        if ($result === null) {
-            return $result;
-        }
-
-        return $destImg;
+        return $head . $suffix . $tail;
     }
 
     private function resize(string $srcImg, string $destImg, int $width, ?int $height = null): ?string

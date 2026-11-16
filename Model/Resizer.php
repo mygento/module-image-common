@@ -21,7 +21,7 @@ class Resizer
      * @return array{
      *     srcset: string,
      *     url: string,
-     *     lqip?: string,
+     *     lqip?: string|null,
      *     list: array<array{
      *         width: int,
      *         url: string
